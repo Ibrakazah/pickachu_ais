@@ -24,10 +24,18 @@ const LoginPage = () => {
             });
 
             if (response.data.status === 'success') {
-                // Сохраняем имя, чтобы потом красиво поприветствовать
+                // Сохраняем все данные, включая новые (класс, подгруппа, роль)
                 localStorage.setItem('studentName', response.data.student_name);
-                // Летим на дашборд!
-                navigate('/dashboard');
+                localStorage.setItem('className', response.data.class_name);
+                localStorage.setItem('subgroup', response.data.subgroup);
+                localStorage.setItem('role', response.data.role);
+
+                // Проверяем роль и летим на нужный экран
+                if (response.data.role === 'teacher') {
+                    navigate('/teacher');
+                } else {
+                    navigate('/homepage');
+                }
             }
         } catch (err) {
             setError('Кіру қатесі: логин немесе құпия сөз дұрыс емес');

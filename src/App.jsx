@@ -1,20 +1,19 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import LoginPage from './pages/LoginPage';
-import Dashboard from './pages/Dashboard'; // <-- ВАЖНО: Импортируем нашу новую страницу
+import LoginPage from './pages/LoginPage.jsx';
+import HomePage from './pages/HomePage';
+import Dashboard from './pages/Dashboard';
 
-function App() {
+const App = () => {
     return (
         <Router>
             <Routes>
-                {/* Главная страница с логином */}
                 <Route path="/" element={<LoginPage />} />
-
-                {/* Та самая страница, которую не мог найти React */}
+                <Route path="/homepage" element={<HomePage />} />
                 <Route path="/dashboard" element={<Dashboard />} />
             </Routes>
         </Router>
     );
-}
+};
 
 export default App;
