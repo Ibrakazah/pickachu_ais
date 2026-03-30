@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import List, Optional
 import requests
 
 app = FastAPI(title="Pickachu Smart Platform API")
@@ -19,7 +20,6 @@ app.add_middleware(
 
 # 1. Фейковые пользователи
 MOCK_USERS = {
-    "teacher": {"password": "123", "role": "teacher", "name": "Ахметов А.Б.", "class_name": "10 A", "id": "t1"},
     "student1": {"password": "123", "role": "student", "name": "Алиев Арман", "class_name": "10 A", "id": "s1"},
     "student2": {"password": "123", "role": "student", "name": "Бекова Аяжан", "class_name": "10 A", "id": "s2"},
     "student3": {"password": "123", "role": "student", "name": "Ким Денис", "class_name": "10 A", "id": "s3"},
@@ -62,6 +62,12 @@ def generate_default_grades():
 
 MOCK_GRADES_DB = generate_default_grades()
 
+# 4. База данных для портфолио (ПРОЕКТЫ) - ПУСТАЯ изначально
+PORTFOLIO_DB = { uid: [] for uid in MOCK_USERS.keys() }
+
+# 5. База данных для портфолио (НАВЫКИ) - ПУСТАЯ изначально
+SKILLS_DB = { uid: [] for uid in MOCK_USERS.keys() }
+
 # Глобальная сессия (память сервера)
 SESSION = {
     "token": None,
@@ -74,7 +80,7 @@ SESSION = {
     "group_uuid": None,
     "class_name": None,  # Класс (напр. 10 A)
     "subgroup": None,    # Подгруппа
-    "role": "student"    # Роль (student/teacher)
+    "role": "student"    # Роль
 }
 
 class LoginPayload(BaseModel):
@@ -86,7 +92,7 @@ class LoginPayload(BaseModel):
 # ==========================================
 @app.post("/api/v1/auth/verify")
 async def verify_user(req: LoginPayload):
-    # ПРОБЕРКА НА МОКОВОГО ПОЛЬЗОВАТЕЛЯ
+    # ПРОВЕРКА НА МОКОВОГО ПОЛЬЗОВАТЕЛЯ
     if req.username in MOCK_USERS and MOCK_USERS[req.username]["password"] == req.password:
         user = MOCK_USERS[req.username]
         SESSION["token"] = "mock_token"
@@ -130,10 +136,15 @@ async def verify_user(req: LoginPayload):
     SESSION["user_id"] = str(user_info.get('userId') or user_info.get('id'))
     SESSION["group_uuid"] = student_info.get('studentGroupUuid')
 
-    # 🔥 НОВОЕ: ВЫТАСКИВАЕМ КЛАСС И ПОДГРУППУ 🔥
+    # ВЫТАСКИВАЕМ КЛАСС И ПОДГРУППУ
     SESSION["class_name"] = group_info.get('name', 'Не указан')
     SESSION["subgroup"] = student_info.get('subGroupName') or "Общая группа"
     SESSION["role"] = "student"
+
+    # Инициализируем БД для нового пользователя, если его нет
+    uid = SESSION["user_id"]
+    if uid not in PORTFOLIO_DB: PORTFOLIO_DB[uid] = []
+    if uid not in SKILLS_DB: SKILLS_DB[uid] = []
 
     print(f"✅ ВХОД (BilimClass): {SESSION['student_name']} | Класс: {SESSION['class_name']} | Группа: {SESSION['subgroup']}")
 
@@ -152,7 +163,6 @@ async def verify_user(req: LoginPayload):
 async def get_home_data():
     recent_grades = []
 
-    # Если это моковый ученик, берем его реальные (моковые) последние оценки
     if SESSION["user_id"] and SESSION["user_id"].startswith("s"):
         student_grades = MOCK_GRADES_DB.get(SESSION["user_id"], {})
         for sid, subj in student_grades.items():
@@ -166,7 +176,6 @@ async def get_home_data():
                     "p": last_m["percent"]
                 })
     else:
-        # Для пользователей BilimClass возвращаем моковые оценки для демо
         recent_grades = [
             {"subject": "Орыс тілі", "score": "10", "type": "ФО", "date": "25 наурыз", "p": 100},
             {"subject": "Математика", "score": "9", "type": "ФО", "date": "24 наурыз", "p": 90},
@@ -177,7 +186,7 @@ async def get_home_data():
     return {
         "status": "success",
         "news": MOCK_NEWS,
-        "recent_grades": recent_grades[:5] # Отдаем только последние 5
+        "recent_grades": recent_grades[:5]
     }
 
 # ==========================================
@@ -185,10 +194,8 @@ async def get_home_data():
 # ==========================================
 @app.get("/api/v1/grades/quarter")
 async def get_quarter_grades(period: int = Query(1)):
-    # ЕСЛИ ЭТО МОКОВЫЙ СТУДЕНТ
     if SESSION["user_id"] and SESSION["user_id"].startswith("s"):
         table = list(MOCK_GRADES_DB[SESSION["user_id"]].values())
-        # Пересчитываем средние значения перед отправкой
         for subject in table:
             for m_type, key in [('ФО', 'percent_fb'), ('БЖБ', 'percent_bjb'), ('ТЖБ', 'percent_tjb')]:
                 cat_marks = [m['percent'] for m in subject['marks'] if m['type'] == m_type]
@@ -197,8 +204,6 @@ async def get_quarter_grades(period: int = Query(1)):
                     subject[key] = f"{int(avg)}%" if avg.is_integer() else f"{round(avg, 1)}%"
         return {"status": "success", "table": table}
 
-
-    # ЕСЛИ ЭТО РЕАЛЬНЫЙ СТУДЕНТ (BilimClass)
     if not SESSION["token"] or not SESSION["chat_token"]:
         raise HTTPException(status_code=403, detail="Авторизациядан өтіңіз!")
 
@@ -217,7 +222,6 @@ async def get_quarter_grades(period: int = Query(1)):
     }
 
     try:
-        # 1. Запрос списка предметов
         res_sub = requests.get('https://api.bilimclass.kz/api/v4/os/clientoffice/diary/subjects',
             headers=headers_main, params={
                 "schoolId": SESSION["school_id"],
@@ -227,7 +231,6 @@ async def get_quarter_grades(period: int = Query(1)):
                 "groupId": SESSION["group_id"]
             })
 
-        # Настройка дат четвертей
         dates = {
             1: ("2025-09-01T00:00:00.000Z", "2025-10-31T00:00:00.000Z"),
             2: ("2025-11-01T00:00:00.000Z", "2025-12-31T00:00:00.000Z"),
@@ -236,7 +239,6 @@ async def get_quarter_grades(period: int = Query(1)):
         }
         dateFrom, dateTo = dates.get(period, dates[1])
 
-        # 2. Запрос детальных оценок из журнала
         res_marks = requests.get('https://journal-service.bilimclass.kz/diary/quarter',
             headers=headers_journal, params={
                 "schoolId": SESSION["school_id"],
@@ -256,13 +258,9 @@ async def get_quarter_grades(period: int = Query(1)):
             table[sid] = {
                 "subject_name": s.get('subjectName', '').strip(),
                 "marks": [],
-                "percent_fb": '-',
-                "percent_bjb": '-',
-                "percent_tjb": '-',
-                "finalGrade": 3
+                "percent_fb": '-', "percent_bjb": '-', "percent_tjb": '-', "finalGrade": 3
             }
 
-        # 3. Обработка каждой оценки
         for l_uuid, info in marks_data.items():
             for cat, m_type in [('formattedScore', 'ФО'), ('sor', 'БЖБ'), ('soch', 'ТЖБ')]:
                 m_info = info.get(cat)
@@ -271,10 +269,7 @@ async def get_quarter_grades(period: int = Query(1)):
                     if sid in table:
                         val = m_info.get('mark')
                         mmax = m_info.get('markMax')
-
-                        # Расчет процента
                         p = (float(val) / float(mmax) * 100) if mmax and float(mmax) > 0 else 0
-
                         table[sid]["marks"].append({
                             "val": f"{val}/{mmax}" if mmax else str(val),
                             "raw_val": float(val),
@@ -283,7 +278,6 @@ async def get_quarter_grades(period: int = Query(1)):
                             "type": m_type
                         })
 
-        # 4. Расчет средних по колонкам
         for sid, subject in table.items():
             for m_type, key in [('ФО', 'percent_fb'), ('БЖБ', 'percent_bjb'), ('ТЖБ', 'percent_tjb')]:
                 cat_marks = [m['percent'] for m in subject['marks'] if m['type'] == m_type]
@@ -292,56 +286,80 @@ async def get_quarter_grades(period: int = Query(1)):
                     subject[key] = f"{int(avg)}%" if avg.is_integer() else f"{round(avg, 1)}%"
 
         return {"status": "success", "table": list(table.values())}
-
     except Exception as e:
         print(f"🔥 ОШИБКА БЭКЕНДА: {e}")
         return {"status": "error", "table": []}
 
 # ==========================================
-# 4. АДМИН-ПАНЕЛЬ УЧИТЕЛЯ (ДЛЯ ХАКАТОНА)
+# 4. МАРШРУТЫ ДЛЯ ПОРТФОЛИО (ПРОЕКТЫ)
 # ==========================================
-class AddGradePayload(BaseModel):
-    student_id: str
-    subject_index: str  # Индекс от "0" до "5"
-    raw_val: float
-    max_val: float
-    mark_type: str      # "ФО", "БЖБ", "ТЖБ"
+class ProjectPayload(BaseModel):
+    title: str
+    description: str
+    link1: str = ""
+    link2: str = ""
 
-@app.post("/api/v1/admin/add_grade")
-async def admin_add_grade(req: AddGradePayload):
-    # Проверка, что вызывает учитель
-    if SESSION.get("role") != "teacher":
-        raise HTTPException(status_code=403, detail="Доступ только для учителя")
+@app.get("/api/v1/portfolio/projects")
+async def get_portfolio_projects():
+    uid = SESSION["user_id"]
+    if not uid: return {"status": "error", "projects": []}
+    return {"status": "success", "projects": PORTFOLIO_DB.get(uid, [])}
 
-    if req.student_id in MOCK_GRADES_DB and req.subject_index in MOCK_GRADES_DB[req.student_id]:
-        percent = (req.raw_val / req.max_val) * 100 if req.max_val > 0 else 0
-        new_mark = {
-            "val": f"{int(req.raw_val)}/{int(req.max_val)}",
-            "raw_val": req.raw_val,
-            "max": req.max_val,
-            "percent": percent,
-            "type": req.mark_type
-        }
-        MOCK_GRADES_DB[req.student_id][req.subject_index]["marks"].append(new_mark)
-        return {"status": "success", "message": "Оценка добавлена!"}
-    return {"status": "error", "message": "Ученик или предмет не найден"}
+@app.post("/api/v1/portfolio/add_project")
+async def add_portfolio_project(req: ProjectPayload):
+    uid = SESSION["user_id"]
+    if not uid: raise HTTPException(status_code=401)
 
+    new_project = {
+        "id": len(PORTFOLIO_DB[uid]) + 1,
+        "title": req.title,
+        "description": req.description,
+        "link1": req.link1,
+        "link2": req.link2
+    }
+    PORTFOLIO_DB[uid].insert(0, new_project)
+    return {"status": "success"}
+
+# ==========================================
+# 5. МАРШРУТЫ ДЛЯ ПОРТФОЛИО (НАВЫКИ)
+# ==========================================
+@app.get("/api/v1/portfolio/skills")
+async def get_skills():
+    uid = SESSION["user_id"]
+    if not uid: return {"status": "error", "skills": []}
+    return {"status": "success", "skills": SKILLS_DB.get(uid, [])}
+
+@app.post("/api/v1/portfolio/add_skill")
+async def add_skill(skill: str = Query(...)):
+    uid = SESSION["user_id"]
+    if not uid: raise HTTPException(status_code=401)
+    if skill not in SKILLS_DB[uid]:
+        SKILLS_DB[uid].append(skill)
+    return {"status": "success", "skills": SKILLS_DB[uid]}
+
+@app.delete("/api/v1/portfolio/remove_skill")
+async def remove_skill(skill: str = Query(...)):
+    uid = SESSION["user_id"]
+    if uid in SKILLS_DB and skill in SKILLS_DB[uid]:
+        SKILLS_DB[uid].remove(skill)
+    return {"status": "success"}
+
+# ==========================================
+# 6. ЭНДПОИНТ ДЛЯ AI-ГЕНЕРАТОРА НОВОСТЕЙ
+# ==========================================
 class AddNewsPayload(BaseModel):
     title: str
     description: str
     image_url: str
 
-@app.post("/api/v1/admin/add_news")
-async def admin_add_news(req: AddNewsPayload):
-    if SESSION.get("role") != "teacher":
-        raise HTTPException(status_code=403, detail="Доступ только для учителя")
-
+@app.post("/api/v1/ai/add_news")
+async def ai_add_news(req: AddNewsPayload):
     new_item = {
         "id": len(MOCK_NEWS) + 1,
-        "title": req.title,
-        "date": "Жаңа",
+        "title": f"✨ AI: {req.title}",
+        "date": "Жаңа (Авто)",
         "description": req.description,
-        "image": req.image_url
+        "image": req.image_url or "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=1000&auto=format&fit=crop"
     }
-    MOCK_NEWS.insert(0, new_item) # Добавляем в начало списка
-    return {"status": "success", "message": "Новость опубликована!"}
+    MOCK_NEWS.insert(0, new_item)
+    return {"status": "success"}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
-    Home, Calendar, BookOpen, Bell, Award, Loader,
+    Home, Calendar, BookOpen, Briefcase, Award, Loader,
     Pencil, ChevronUp, ChevronDown, Inbox, Settings
 } from 'lucide-react';
 
@@ -121,8 +121,9 @@ const Dashboard = () => {
                     <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5">
                         <BookOpen size={18}/> Пәндер
                     </button>
-                    <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5">
-                        <Bell size={18}/> Хабарлама
+                    {/* ПЕРЕХОД НА ПОРТФОЛИО */}
+                    <button onClick={() => navigate('/portfolio')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5">
+                        <Briefcase size={18}/> Портфолио
                     </button>
                 </div>
 

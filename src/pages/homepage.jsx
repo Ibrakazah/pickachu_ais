@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-dom';
-import { useNavigate as useReactRouterNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
-    Home, Calendar, BookOpen, Bell, Award, Loader,
+    Home, Calendar, BookOpen, Briefcase, Award, Loader,
     ChevronLeft, ChevronRight, Settings
 } from 'lucide-react';
 
 const HomePage = () => {
-    const navigate = useReactRouterNavigate();
+    const navigate = useNavigate();
 
     // --- СОСТОЯНИЯ ПРОФИЛЯ ---
     const [studentName, setStudentName] = useState('Оқушы');
@@ -90,8 +89,9 @@ const HomePage = () => {
                     <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5">
                         <BookOpen size={18}/> Пәндер
                     </button>
-                    <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5">
-                        <Bell size={18}/> Хабарлама
+                    {/* ПЕРЕХОД НА ПОРТФОЛИО */}
+                    <button onClick={() => navigate('/portfolio')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5">
+                        <Briefcase size={18}/> Портфолио
                     </button>
                 </div>
 
