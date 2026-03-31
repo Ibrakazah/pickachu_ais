@@ -30,13 +30,13 @@ const Portfolio = () => {
 
     // 1. Инициализация
     useEffect(() => {
-        const savedName = localStorage.getItem('studentName');
+        const savedName = sessionStorage.getItem('studentName');
         if (!savedName) {
             navigate('/');
         } else {
             setStudentName(savedName);
-            setClassName(localStorage.getItem('className') || '10 A');
-            setSubgroup(localStorage.getItem('subgroup') || '1-группа');
+            setClassName(sessionStorage.getItem('className') || '10 A');
+            setSubgroup(sessionStorage.getItem('subgroup') || '1-группа');
             fetchAllData();
         }
     }, [navigate]);

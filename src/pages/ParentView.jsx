@@ -11,7 +11,7 @@ const ParentView = () => {
     }, []);
 
     const fetchChildData = async () => {
-        const childId = localStorage.getItem('child_id') || 's1';
+        const childId = sessionStorage.getItem('child_id') || 's1';
         const res = await axios.get(`http://localhost:8000/api/v1/ai/student_prediction?uid=${childId}`);
         if (res.data.status === "success") {
             setChildData(res.data);
@@ -22,7 +22,7 @@ const ParentView = () => {
     return (
         <div className="parent-view">
             <header className="premium-header">
-                <h1>Режим Родителя: {localStorage.getItem('studentName') || 'Алиев Арман'}</h1>
+                <h1>Режим Родителя: {sessionStorage.getItem('studentName') || 'Алиев Арман'}</h1>
                 <p>Еженедельный AI-отчет и мониторинг успеваемости</p>
             </header>
 

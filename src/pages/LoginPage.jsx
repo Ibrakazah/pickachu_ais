@@ -24,15 +24,18 @@ const LoginPage = () => {
             });
 
             if (response.data.status === 'success') {
-                // Сохраняем все данные, включая новые (класс, подгруппа, роль)
-                localStorage.setItem('studentName', response.data.student_name);
-                localStorage.setItem('className', response.data.class_name);
-                localStorage.setItem('subgroup', response.data.subgroup);
-                localStorage.setItem('role', response.data.role);
-                localStorage.setItem('userId', response.data.id || '');
-                if (response.data.child_id) localStorage.setItem('child_id', response.data.child_id);
+                // Сохраняем все данные, включая токен для новой архитектуры безопасности
+                sessionStorage.setItem('token', response.data.token);
+                sessionStorage.setItem('studentName', response.data.student_name);
+                sessionStorage.setItem('className', response.data.class_name);
+                sessionStorage.setItem('subgroup', response.data.subgroup);
+                sessionStorage.setItem('role', response.data.role);
+                sessionStorage.setItem('userId', response.data.id || '');
+                if (response.data.child_id) sessionStorage.setItem('child_id', response.data.child_id);
 
                 if (response.data.role === 'admin') navigate('/admin');
+                else if (response.data.role === 'parent') navigate('/parent-dashboard');
+                else if (response.data.role === 'teacher') navigate('/teacher-dashboard');
                 else navigate('/homepage');
             }
         } catch (err) {
