@@ -23,13 +23,14 @@ Unified digital environment for student success, predictive analysis, and smart 
 ## 🛠 Tech Stack
 
 *   **Frontend**: React (Vite) + Vanilla CSS (Premium Aesthetics)
-*   **Backend**: Python (FastAPI) + Mock Server for BilimClass API
-*   **AI**: GPT-like predictive models for analysis and summarization.
+*   **Backend**: Python (FastAPI) + Mock Server for bilimclass
+ЕСТЬ ВОЗМОЖНОСТЬ ТОГО ЧТОБЫ СМОТРЕТЬ ОЦЕНКИ РЕЛАЬНЫХ ПОЛЬЗОВАТЕЛЕЙ BILIMCLASS
+ПОПРОБУЙТЕ ВВЕСТИ СВОИХ ЮЗЕРОВ)))
+1.  **Backend**: cd back
+2.   py -m uvicorn apishka:app --reload
 
-## 🏃 Running the Project
-
-1.  **Backend**: `cd back && py -m uvicorn apishka:app --reload`
-2.  **Frontend**: `npm run dev`
+3.  **Frontend**: npm install
+npm run dev
 
 ---
 *Built with ❤️ by Pickachu Team.*
