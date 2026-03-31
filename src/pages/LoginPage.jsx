@@ -29,13 +29,11 @@ const LoginPage = () => {
                 localStorage.setItem('className', response.data.class_name);
                 localStorage.setItem('subgroup', response.data.subgroup);
                 localStorage.setItem('role', response.data.role);
+                localStorage.setItem('userId', response.data.id || '');
+                if (response.data.child_id) localStorage.setItem('child_id', response.data.child_id);
 
-                // Проверяем роль и летим на нужный экран
-                if (response.data.role === 'teacher') {
-                    navigate('/teacher');
-                } else {
-                    navigate('/homepage');
-                }
+                if (response.data.role === 'admin') navigate('/admin');
+                else navigate('/homepage');
             }
         } catch (err) {
             setError('Кіру қатесі: логин немесе құпия сөз дұрыс емес');

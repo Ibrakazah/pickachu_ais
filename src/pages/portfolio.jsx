@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
     Home, Calendar, BookOpen, Briefcase, Award, Settings,
-    Terminal, Code, Zap, Trophy, ExternalLink, Plus, FolderOpen, X, Trash2, Link
+    Terminal, Code, Zap, Trophy, ExternalLink, Plus, FolderOpen, X, Trash2, Link, LayoutDashboard
 } from 'lucide-react';
 
 const Portfolio = () => {
@@ -79,6 +79,15 @@ const Portfolio = () => {
             console.error("Жоба қосу қатесі:", e);
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleRemoveProject = async (projectId) => {
+        try {
+            const res = await axios.delete(`http://localhost:8000/api/v1/portfolio/remove_project?project_id=${projectId}`);
+            if (res.data.status === 'success') fetchAllData();
+        } catch (e) {
+            console.error("Жобаны өшіру қатесі:", e);
         }
     };
 
@@ -183,6 +192,9 @@ const Portfolio = () => {
                     </button>
                     <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white/10 text-yellow-400 shadow-md">
                         <Briefcase size={18}/> Портфолио
+                    </button>
+                    <button onClick={() => navigate('/schedule')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all text-slate-400 hover:text-white hover:bg-white/5">
+                        <LayoutDashboard size={18}/> Кесте
                     </button>
                 </div>
 
@@ -295,12 +307,17 @@ const Portfolio = () => {
                                         <div key={index} className="bg-white/[0.03] border border-white/10 rounded-[2.5rem] p-8 hover:bg-white/[0.06] transition-all group relative overflow-hidden flex flex-col shadow-lg hover:shadow-2xl hover:-translate-y-1 duration-300">
                                             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl group-hover:bg-blue-500/10 transition-colors"></div>
 
-                                            <div className={`w-16 h-16 rounded-[1.25rem] flex items-center justify-center mb-8 transition-transform group-hover:scale-110 shadow-lg ${index % 2 === 0 ? 'bg-blue-500/20 text-blue-400 shadow-blue-500/10' : 'bg-purple-500/20 text-purple-400 shadow-purple-500/10'}`}>
-                                                <Terminal size={32}/>
+                                            <div className="flex justify-between items-start mb-8 z-10 block">
+                                                <div className={`w-16 h-16 rounded-[1.25rem] flex items-center justify-center transition-transform group-hover:scale-110 shadow-lg ${index % 2 === 0 ? 'bg-blue-500/20 text-blue-400 shadow-blue-500/10' : 'bg-purple-500/20 text-purple-400 shadow-purple-500/10'}`}>
+                                                    <Terminal size={32}/>
+                                                </div>
+                                                <button onClick={() => handleRemoveProject(project.id)} className="p-3 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all border border-transparent hover:border-red-400/20">
+                                                    <Trash2 size={20}/>
+                                                </button>
                                             </div>
 
-                                            <h3 className="text-2xl font-black text-white mb-3 tracking-tight leading-tight">{project.title}</h3>
-                                            <p className="text-slate-400 text-base mb-8 leading-relaxed flex-grow line-clamp-4">{project.description}</p>
+                                            <h3 className="text-2xl font-black text-white mb-3 tracking-tight leading-tight z-10">{project.title}</h3>
+                                            <p className="text-slate-400 text-base mb-8 leading-relaxed flex-grow line-clamp-4 z-10">{project.description}</p>
 
                                             <div className="flex gap-4 mt-auto">
                                                 {project.link1 ? (

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
     Home, Calendar, BookOpen, Briefcase, Award, Loader,
-    ChevronLeft, ChevronRight, Settings
+    ChevronLeft, ChevronRight, Settings, LayoutDashboard
 } from 'lucide-react';
 
 const HomePage = () => {
@@ -93,9 +93,16 @@ const HomePage = () => {
                     <button onClick={() => navigate('/portfolio')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5">
                         <Briefcase size={18}/> Портфолио
                     </button>
-                </div>
+                    {/* ПЕРЕХОД НА КЕСТЕ */}
+                    <button onClick={() => navigate('/schedule')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5">
+                        <LayoutDashboard size={18}/> Кесте
+                    </button>
+</div>
 
                 <div className="flex items-center gap-5">
+                    <button onClick={() => navigate('/kiosk')} className="p-2.5 text-slate-400 hover:text-white rounded-xl hover:bg-white/5 transition-all hidden sm:block border border-white/5">
+                        KIOSK
+                    </button>
                     <button className="p-2.5 text-slate-400 hover:text-white rounded-xl hover:bg-white/5 transition-all hidden sm:block">
                         <Settings size={20} />
                     </button>

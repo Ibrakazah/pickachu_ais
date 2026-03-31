@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
     Home, Calendar, BookOpen, Briefcase, Award, Loader,
-    Pencil, ChevronUp, ChevronDown, Inbox, Settings
+    Pencil, ChevronUp, ChevronDown, Inbox, Settings, LayoutDashboard
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -21,6 +21,10 @@ const Dashboard = () => {
     const [isSimulating, setIsSimulating] = useState(false);
     const [simulatedOffsets, setSimulatedOffsets] = useState({});
 
+    // --- AI & GAMIFICATION ---
+    const [aiPrediction, setAiPrediction] = useState(null);
+    const [gamificationData, setGamificationData] = useState(null);
+
     useEffect(() => {
         const savedName = localStorage.getItem('studentName');
         if (!savedName) {
@@ -35,7 +39,20 @@ const Dashboard = () => {
     useEffect(() => {
         fetchGrades(selectedQuarter);
         setSimulatedOffsets({});
+        fetchAiData();
     }, [selectedQuarter]);
+
+    const fetchAiData = async () => {
+        const uid = localStorage.getItem('userId') || 's1';
+        try {
+            const [predRes, gamRes] = await Promise.all([
+                axios.get(`http://localhost:8000/api/v1/ai/student_prediction?uid=${uid}`),
+                axios.get(`http://localhost:8000/api/v1/gamification/data?uid=${uid}`)
+            ]);
+            if (predRes.data.status === "success") setAiPrediction(predRes.data);
+            if (gamRes.data.status === "success") setGamificationData(gamRes.data);
+        } catch (e) { console.error(e); }
+    };
 
     // --- API ЗАПРОСЫ ---
     const fetchGrades = async (quarter) => {
@@ -124,6 +141,10 @@ const Dashboard = () => {
                     {/* ПЕРЕХОД НА ПОРТФОЛИО */}
                     <button onClick={() => navigate('/portfolio')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5">
                         <Briefcase size={18}/> Портфолио
+                    </button>
+                    {/* ПЕРЕХОД НА КЕСТЕ */}
+                    <button onClick={() => navigate('/schedule')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5">
+                        <LayoutDashboard size={18}/> Кесте
                     </button>
                 </div>
 
@@ -233,6 +254,94 @@ const Dashboard = () => {
                             )}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* AI TUTOR & GAMIFICATION SECTIONS */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12">
+                        {/* AI TUTOR CARD */}
+                        <div className="bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/30 rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden group">
+                            <div className="absolute -right-20 -top-20 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl group-hover:bg-indigo-500/20 transition-colors"></div>
+                            <div className="relative z-10">
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-14 h-14 bg-indigo-500 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                                        <Award className="text-white w-8 h-8" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-3xl font-black text-white tracking-tight">AI Тьютор</h2>
+                                        <p className="text-indigo-300 font-medium tracking-wide flex items-center gap-2">
+                                            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span> Предиктивтік талдау қосулы
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {aiPrediction && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                                        <div className={`p-6 rounded-3xl border ${aiPrediction.risk_level === 'medium' ? 'bg-orange-500/10 border-orange-500/20 text-orange-200' : 'bg-green-500/10 border-green-500/20 text-green-200'}`}>
+                                            <p className="font-bold text-lg leading-relaxed">{aiPrediction.recommendation}</p>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {aiPrediction.resources.map((res, i) => (
+                                                <a key={i} href={res.url} className="px-6 py-4 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-between hover:bg-white/10 transition-all font-bold text-slate-300 hover:text-white group">
+                                                    {res.title} <ChevronUp className="rotate-90 opacity-40 group-hover:opacity-100" size={18}/>
+                                                </a>
+                                            ))}
+                                        </div>
+
+                                        <div className="mt-8 pt-8 border-t border-white/10">
+                                            <h3 className="text-sm font-black text-indigo-400 uppercase tracking-widest mb-6">Граф Знаний (Skill Tree)</h3>
+                                            <div className="flex flex-wrap gap-3">
+                                                {Object.entries(aiPrediction.knowledge_graph).map(([k, v]) => (
+                                                    <div key={k} className="px-5 py-3 bg-white/5 border border-white/5 rounded-2xl flex items-center gap-4 hover:border-indigo-500/30 transition-all">
+                                                        <span className="text-slate-400 font-bold">{k}</span>
+                                                        <div className="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-indigo-500 rounded-full" style={{width: `${v}%`}}></div>
+                                                        </div>
+                                                        <span className="text-indigo-300 font-black tabular-nums font-mono">{v}%</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* GAMIFICATION & ACHIEVEMENTS CARD */}
+                        <div className="bg-white/[0.02] border border-white/10 rounded-[2.5rem] p-10 shadow-2xl">
+                            <div className="flex items-center justify-between mb-10">
+                                <h2 className="text-3xl font-black text-white tracking-tight">Жетістіктер</h2>
+                                <div className="px-6 py-2 bg-yellow-400/10 border border-yellow-400/20 rounded-full text-yellow-400 font-black text-sm">
+                                    XP: {gamificationData?.points || 0}
+                                </div>
+                            </div>
+
+                            <div className="space-y-10">
+                                <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+                                    {gamificationData?.achievements.map(ach => (
+                                        <div key={ach.id} className="min-w-[140px] p-6 bg-white/5 border border-white/10 rounded-3xl flex flex-col items-center gap-3 hover:scale-105 transition-transform cursor-help group">
+                                            <span className="text-4xl filter drop-shadow-lg group-hover:scale-110 transition-transform">{ach.icon}</span>
+                                            <span className="text-sm font-black text-slate-200">{ach.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="space-y-4">
+                                    <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest">Лидерборд (Мектеп)</h3>
+                                    {gamificationData?.leaderboard.map(user => (
+                                        <div key={user.name} className={`flex items-center justify-between p-5 rounded-2xl border transition-all ${user.name === studentName ? 'bg-yellow-400/10 border-yellow-400/30' : 'bg-white/5 border-white/5'}`}>
+                                            <div className="flex items-center gap-4">
+                                                <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm ${user.rank === 1 ? 'bg-yellow-400 text-slate-900' : 'bg-white/10 text-slate-400'}`}>
+                                                    {user.rank}
+                                                </span>
+                                                <span className="font-bold text-slate-200">{user.name}</span>
+                                            </div>
+                                            <span className="font-black text-yellow-400 font-mono">{user.points} XP</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </main>

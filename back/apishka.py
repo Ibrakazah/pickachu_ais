@@ -20,11 +20,8 @@ app.add_middleware(
 
 # 1. Фейковые пользователи
 MOCK_USERS = {
-    "student1": {"password": "123", "role": "student", "name": "Алиев Арман", "class_name": "10 A", "id": "s1"},
-    "student2": {"password": "123", "role": "student", "name": "Бекова Аяжан", "class_name": "10 A", "id": "s2"},
-    "student3": {"password": "123", "role": "student", "name": "Ким Денис", "class_name": "10 A", "id": "s3"},
-    "student4": {"password": "123", "role": "student", "name": "Оспанов Диас", "class_name": "10 A", "id": "s4"},
-    "student5": {"password": "123", "role": "student", "name": "Сәкенқызы Мәдина", "class_name": "10 A", "id": "s5"},
+    "student1": {"password": "123", "role": "student", "name": "Алиев Арман", "class_name": "10 A", "id": "s1", "child_id": None},
+    "admin1": {"password": "123", "role": "admin", "name": "Жумабеков Кайрат", "id": "a1"},
 }
 
 # 2. Фейковые новости
@@ -63,10 +60,33 @@ def generate_default_grades():
 MOCK_GRADES_DB = generate_default_grades()
 
 # 4. База данных для портфолио (ПРОЕКТЫ) - ПУСТАЯ изначально
-PORTFOLIO_DB = { uid: [] for uid in MOCK_USERS.keys() }
+PORTFOLIO_DB = { user["id"]: [] for user in MOCK_USERS.values() }
 
 # 5. База данных для портфолио (НАВЫКИ) - ПУСТАЯ изначально
-SKILLS_DB = { uid: [] for uid in MOCK_USERS.keys() }
+SKILLS_DB = { user["id"]: [] for user in MOCK_USERS.values() }
+
+# 6. БАЗА ДАННЫХ РАСПИСАНИЯ
+# Формат: { "day_of_week": [ { "time": "...", "subject": "...", "teacher": "...", "room": "...", "class": "..." } ] }
+SCHEDULE_DB = {
+    "Monday": [
+        {"time": "08:30", "subject": "Алгебра", "teacher": "Смагулов Б.", "room": "301", "class": "10 A"},
+        {"time": "09:25", "subject": "Физика", "teacher": "Асанов М.", "room": "204", "class": "10 A"},
+        {"time": "10:30", "subject": "История", "teacher": "Кенжебаев Д.", "room": "112", "class": "10 A"},
+    ],
+    "Tuesday": [
+        {"time": "08:30", "subject": "Ағылшын тілі", "teacher": "Иванова О.", "room": "402", "class": "10 A"},
+    ]
+}
+
+# 7. ГЕЙМИФИКАЦИЯ
+ACHIEVEMENTS_DB = {
+    "s1": [{"id": 1, "name": "Математик", "icon": "📐", "desc": "10/10 за контрольную"}],
+}
+LEADERBOARD = [
+    {"name": "Алиев Арман", "points": 1250, "rank": 1},
+    {"name": "Бекова Аяжан", "points": 1100, "rank": 2},
+    {"name": "Ким Денис", "points": 980, "rank": 3},
+]
 
 # Глобальная сессия (память сервера)
 SESSION = {
@@ -99,7 +119,7 @@ async def verify_user(req: LoginPayload):
         SESSION["chat_token"] = "mock_chat"
         SESSION["user_id"] = user["id"]
         SESSION["student_name"] = user["name"]
-        SESSION["class_name"] = user["class_name"]
+        SESSION["class_name"] = user.get("class_name", "")
         SESSION["subgroup"] = "1-группа"
         SESSION["role"] = user["role"]
 
@@ -107,9 +127,11 @@ async def verify_user(req: LoginPayload):
         return {
             "status": "success",
             "student_name": SESSION["student_name"],
-            "class_name": SESSION["class_name"],
-            "subgroup": SESSION["subgroup"],
-            "role": SESSION["role"]
+            "class_name": SESSION["class_name"] or "Админ",
+            "subgroup": SESSION["subgroup"] or "Штаб",
+            "role": SESSION["role"],
+            "id": SESSION["user_id"],
+            "child_id": user.get("child_id")
         }
 
     # ЕСЛИ НЕ МОК - ОБРАЩАЕМСЯ К BILIMCLASS
@@ -309,6 +331,7 @@ async def get_portfolio_projects():
 async def add_portfolio_project(req: ProjectPayload):
     uid = SESSION["user_id"]
     if not uid: raise HTTPException(status_code=401)
+    if uid not in PORTFOLIO_DB: PORTFOLIO_DB[uid] = []
 
     new_project = {
         "id": len(PORTFOLIO_DB[uid]) + 1,
@@ -318,6 +341,15 @@ async def add_portfolio_project(req: ProjectPayload):
         "link2": req.link2
     }
     PORTFOLIO_DB[uid].insert(0, new_project)
+    return {"status": "success"}
+
+@app.delete("/api/v1/portfolio/remove_project")
+async def remove_portfolio_project(project_id: int):
+    uid = SESSION["user_id"]
+    if not uid or uid not in PORTFOLIO_DB: 
+        return {"status": "error"}
+    
+    PORTFOLIO_DB[uid] = [p for p in PORTFOLIO_DB[uid] if p["id"] != project_id]
     return {"status": "success"}
 
 # ==========================================
@@ -333,6 +365,7 @@ async def get_skills():
 async def add_skill(skill: str = Query(...)):
     uid = SESSION["user_id"]
     if not uid: raise HTTPException(status_code=401)
+    if uid not in SKILLS_DB: SKILLS_DB[uid] = []
     if skill not in SKILLS_DB[uid]:
         SKILLS_DB[uid].append(skill)
     return {"status": "success", "skills": SKILLS_DB[uid]}
@@ -363,3 +396,115 @@ async def ai_add_news(req: AddNewsPayload):
     }
     MOCK_NEWS.insert(0, new_item)
     return {"status": "success"}
+
+# ==========================================
+# 7. SMART SCHEDULE (HARDCORE)
+# ==========================================
+@app.get("/api/v1/schedule")
+async def get_schedule(class_name: Optional[str] = None):
+    cls = class_name or SESSION.get("class_name", "10 A")
+    filtered = {}
+    for day, lessons in SCHEDULE_DB.items():
+        filtered_lessons = [l for l in lessons if l["class"] == cls]
+        if filtered_lessons:
+            filtered[day] = filtered_lessons
+    return {"status": "success", "schedule": filtered}
+
+@app.post("/api/v1/schedule/generate")
+async def generate_schedule():
+    import random
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    subjects = ["Физика", "Алгебра", "Геометрия", "ИТ", "История", "ҚазТілі", "English"]
+    rooms = ["101", "102", "201", "305", "401"]
+    teachers = ["Смагулов Б.", "Асанов М.", "Кенжебаев Д.", "Иванова О.", "Серикбол Ж."]
+    classes = ["10 A", "10 B", "11 A", "9 V"]
+    
+    global SCHEDULE_DB
+    new_schedule = {}
+    for day in days:
+        lessons = []
+        for cls in classes:
+            occupied_teachers = set()
+            occupied_rooms = set()
+            for i in range(random.randint(4, 6)):
+                subj = random.choice(subjects)
+                teach = random.choice([t for t in teachers if t not in occupied_teachers])
+                room = random.choice([r for r in rooms if r not in occupied_rooms])
+                
+                lessons.append({
+                    "time": f"{8+i:02d}:30",
+                    "subject": subj,
+                    "teacher": teach,
+                    "room": room,
+                    "class": cls
+                })
+                occupied_teachers.add(teach)
+                occupied_rooms.add(room)
+        new_schedule[day] = lessons
+    
+    SCHEDULE_DB = new_schedule
+    return {"status": "success", "message": "Расписание сгенерировано ИИ для всех классов!"}
+
+# ==========================================
+# 8. AI ANALYTICS & EARLY WARNING
+# ==========================================
+@app.get("/api/v1/ai/student_prediction")
+async def get_student_prediction(uid: str):
+    return {
+        "status": "success",
+        "risk_level": "medium",
+        "prob_fail": 65,
+        "topic": "Физика (Кинематика)",
+        "recommendation": "С вероятностью 65% ты можешь получить оценку ниже ожидаемой по Физике из-за пробелов в теме 'Законы Ньютона'.",
+        "resources": [
+            {"title": "Видео: Законы Ньютона для начинающих", "url": "#"},
+            {"title": "Тест для самопроверки", "url": "#"}
+        ],
+        "knowledge_graph": {
+            "Algebra": 85, "Physics": 45, "History": 90, "Languages": 75
+        }
+    }
+
+@app.get("/api/v1/teacher/early_warning")
+async def get_early_warning():
+    return {
+        "status": "success",
+        "risky_students": [
+            {"id": "s1", "name": "Алиев Арман", "drop_percent": 15, "last_marks": [2, 3, 2], "subject": "Геометрия"},
+            {"id": "s3", "name": "Ким Денис", "drop_percent": 22, "last_marks": [3, 2], "subject": "Физика"}
+        ]
+    }
+
+@app.get("/api/v1/ai/teacher_report")
+async def get_ai_teacher_report():
+    return {
+        "status": "success",
+        "report": "Отчет по 10 'А' классу: \nОбщая успеваемость стабильна (82%). \nПроблема: 3 ученика имеют задолженности по физике. \nРекомендация: провести доп. занятие в четверг."
+    }
+
+# ==========================================
+# 9. GAMIFICATION & LEADERBOARD
+# ==========================================
+@app.get("/api/v1/gamification/data")
+async def get_gamification_data(uid: str):
+    return {
+        "status": "success",
+        "achievements": ACHIEVEMENTS_DB.get(uid, []),
+        "leaderboard": LEADERBOARD,
+        "current_rank": 1 if uid == "s1" else 5,
+        "points": 1250 if uid == "s1" else 450
+    }
+
+# ==========================================
+# 10. ADMIN DASHBOARD (GLOBAL RADAR)
+# ==========================================
+@app.get("/api/v1/admin/radar")
+async def get_global_radar():
+    return {
+        "status": "success",
+        "parallels": [
+            {"name": "9 Классы", "quality": 78, "attendance": 94},
+            {"name": "10 Классы", "quality": 85, "attendance": 92},
+            {"name": "11 Классы", "quality": 91, "attendance": 89}
+        ]
+    }
