@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, UserCheck, LogOut, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Calendar, UserCheck, LogOut, CheckCircle, Clock, AlertTriangle, TrendingDown, Users, ShieldAlert, BarChart2, Activity } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 
 const API = 'http://localhost:8000';
@@ -25,6 +25,10 @@ const TeacherDashboard = () => {
     const [gradeInputs, setGradeInputs] = useState({});
     // { student_id: { hasSoch: bool, marks: [] } }
     const [studentMarks, setStudentMarks] = useState({});
+
+    // Analytics
+    const [analytics, setAnalytics] = useState(null);
+    const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
     const [availableClasses, setAvailableClasses] = useState([]);
     const [availableSubjects, setAvailableSubjects] = useState([]);
@@ -91,6 +95,24 @@ const TeacherDashboard = () => {
     }, [selectedSubject, selectedQuarter, students]);
 
     useEffect(() => { fetchStudentMarks(); }, [fetchStudentMarks]);
+
+    // ─── Fetch analytics (filtered by teacher's own subjects) ─────────────────
+    const fetchAnalytics = useCallback(async () => {
+        setAnalyticsLoading(true);
+        try {
+            // Передаём предметы учителя как фильтр
+            const subjectsParam = availableSubjects.length
+                ? `?subjects=${encodeURIComponent(availableSubjects.join(','))}`
+                : '';
+            const res = await axios.get(`${API}/api/v1/teacher/early_warning${subjectsParam}`, { headers: authHeader });
+            if (res.data.status === 'success') setAnalytics(res.data);
+        } catch (e) { console.error(e); }
+        finally { setAnalyticsLoading(false); }
+    }, [availableSubjects]);
+
+    useEffect(() => {
+        if (activeTab === 'analytics') fetchAnalytics();
+    }, [activeTab, fetchAnalytics]);
 
     // ─── Handlers ─────────────────────────────────────────────────────────────
     const handleLogout = () => { sessionStorage.clear(); navigate('/'); };
@@ -178,6 +200,12 @@ const TeacherDashboard = () => {
                         className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'journal' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'}`}
                     >
                         <UserCheck className="w-4 h-4" /> Теневой Журнал
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('analytics')}
+                        className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'analytics' ? 'bg-red-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'}`}
+                    >
+                        <ShieldAlert className="w-4 h-4" /> Аналитика рисков
                     </button>
                 </div>
 
@@ -422,6 +450,173 @@ const TeacherDashboard = () => {
                                         <h3 className="text-lg font-bold text-slate-700 mb-2">Выберите класс и предмет</h3>
                                         <p className="text-slate-500">Для выставления оценок укажите класс в панели выше.</p>
                                     </div>
+                                )}
+                            </div>
+                        )}
+                        {/* ── TAB: ANALYTICS ── */}
+                        {activeTab === 'analytics' && (
+                            <div className="space-y-8">
+                                {analyticsLoading ? (
+                                    <div className="flex justify-center py-20">
+                                        <div className="w-10 h-10 border-4 border-red-200 border-t-red-600 rounded-full animate-spin"></div>
+                                    </div>
+                                ) : analytics ? (() => {
+                                    const riskCfg = {
+                                        high:   { label: 'Высокий риск',   bg: 'bg-red-50',    border: 'border-red-200',    badge: 'bg-red-100 text-red-700',    dot: 'bg-red-500',    bar: 'bg-red-500' },
+                                        medium: { label: 'Средний риск',   bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-400', bar: 'bg-orange-400' },
+                                        low:    { label: 'Низкий риск',    bg: 'bg-yellow-50', border: 'border-yellow-200', badge: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-400', bar: 'bg-yellow-400' },
+                                    };
+                                    const highCount   = analytics.risky_students.filter(s => s.risk_level === 'high').length;
+                                    const medCount    = analytics.risky_students.filter(s => s.risk_level === 'medium').length;
+                                    const lowCount    = analytics.risky_students.filter(s => s.risk_level === 'low').length;
+
+                                    return (
+                                        <>
+                                            {/* ── KPI Cards ── */}
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                {[
+                                                    { icon: <ShieldAlert className="w-6 h-6"/>, label: 'Всего в зоне риска', value: analytics.total_at_risk, color: 'text-red-600', bg: 'bg-red-50 border-red-100' },
+                                                    { icon: <Activity className="w-6 h-6"/>,    label: 'Высокий риск',       value: highCount,               color: 'text-red-500',    bg: 'bg-red-50 border-red-100' },
+                                                    { icon: <TrendingDown className="w-6 h-6"/>,label: 'Средний риск',       value: medCount,                color: 'text-orange-500', bg: 'bg-orange-50 border-orange-100' },
+                                                    { icon: <BarChart2 className="w-6 h-6"/>,   label: 'Низкий риск',        value: lowCount,                color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-100' },
+                                                ].map((card, i) => (
+                                                    <div key={i} className={`rounded-2xl border p-5 flex items-center gap-4 ${card.bg}`}>
+                                                        <div className={`${card.color}`}>{card.icon}</div>
+                                                        <div>
+                                                            <div className="text-3xl font-black text-slate-900">{card.value}</div>
+                                                            <div className="text-xs font-bold text-slate-500 mt-0.5">{card.label}</div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {/* ── Class Health ── */}
+                                            {analytics.class_summary?.length > 0 && (
+                                                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                                                    <div className="p-6 border-b border-slate-100">
+                                                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                                            <Users className="w-5 h-5 text-blue-500"/> Успеваемость по классам
+                                                        </h2>
+                                                    </div>
+                                                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                                        {analytics.class_summary.map((cls, i) => {
+                                                            const pct = cls.avg_bolzham;
+                                                            const clr = pct >= 85 ? 'bg-green-500' : pct >= 65 ? 'bg-yellow-400' : 'bg-red-500';
+                                                            const txtClr = pct >= 85 ? 'text-green-600' : pct >= 65 ? 'text-yellow-600' : 'text-red-600';
+                                                            return (
+                                                                <div key={i} className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                                                                    <div className="flex justify-between items-start mb-3">
+                                                                        <span className="font-black text-slate-800 text-lg">{cls.class}</span>
+                                                                        <span className={`text-2xl font-black ${txtClr}`}>{pct}%</span>
+                                                                    </div>
+                                                                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden mb-3">
+                                                                        <div className={`h-full rounded-full transition-all ${clr}`} style={{ width: `${Math.min(pct, 100)}%` }}></div>
+                                                                    </div>
+                                                                    <div className="flex justify-between text-xs text-slate-500 font-medium">
+                                                                        <span><Users className="w-3 h-3 inline mr-1"/>{cls.student_count} уч.</span>
+                                                                        {cls.at_risk_count > 0 && (
+                                                                            <span className="text-red-500 font-bold">⚠ {cls.at_risk_count} в риске</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* ── At-Risk Students ── */}
+                                            <div className="space-y-4">
+                                                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                                    <TrendingDown className="w-5 h-5 text-red-500"/> Ученики в зоне риска <span className="text-slate-400 font-medium">(по вашим предметам)</span>
+                                                </h2>
+                                                {analytics.risky_students.length === 0 ? (
+                                                    <div className="bg-green-50 border border-green-200 rounded-2xl p-10 text-center">
+                                                        <div className="text-4xl mb-3">🎉</div>
+                                                        <p className="text-green-700 font-bold text-lg">Все ученики в норме!</p>
+                                                        <p className="text-green-600 text-sm mt-1">Аномальных падений успеваемости не обнаружено.</p>
+                                                    </div>
+                                                ) : analytics.risky_students.map(student => {
+                                                    const cfg = riskCfg[student.risk_level] || riskCfg.low;
+                                                    return (
+                                                        <div key={student.id} className={`rounded-3xl border p-6 ${cfg.bg} ${cfg.border}`}>
+                                                            {/* Student header */}
+                                                            <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`w-11 h-11 rounded-full flex items-center justify-center text-white font-black text-lg ${cfg.bar}`}>
+                                                                        {student.name.charAt(0)}
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="font-black text-slate-900 text-base">{student.name}</div>
+                                                                        <div className="text-xs text-slate-500 font-medium">{student.class} · {student.issues_count} проблемных предм.</div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="text-right">
+                                                                        <div className="text-2xl font-black text-slate-900">{student.overall_bolzham}%</div>
+                                                                        <div className="text-xs text-slate-500">Общий болжам</div>
+                                                                    </div>
+                                                                    <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black ${cfg.badge}`}>
+                                                                        <span className={`w-2 h-2 rounded-full ${cfg.dot}`}></span>
+                                                                        {cfg.label}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Subject issues */}
+                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                                {student.issues.map((issue, ii) => {
+                                                                    const issueCfg = riskCfg[issue.risk] || riskCfg.low;
+                                                                    const maxTrend = Math.max(...(issue.trend.length ? issue.trend : [100]));
+                                                                    return (
+                                                                        <div key={ii} className="bg-white/70 backdrop-blur rounded-2xl p-4 border border-white/80">
+                                                                            <div className="flex justify-between items-start mb-2">
+                                                                                <span className="font-bold text-slate-800 text-sm leading-tight max-w-[120px]">{issue.subject}</span>
+                                                                                <span className={`px-2 py-0.5 rounded-lg text-xs font-black ${issueCfg.badge}`}>{issue.bolzham}%</span>
+                                                                            </div>
+
+                                                                            {/* Mini trend bar chart */}
+                                                                            {issue.trend.length > 0 && (
+                                                                                <div className="flex items-end gap-1 h-10 mb-3">
+                                                                                    {issue.trend.map((v, ti) => (
+                                                                                        <div key={ti} className="flex-1 flex flex-col items-center justify-end h-full gap-0.5">
+                                                                                            <div
+                                                                                                className={`w-full rounded-sm transition-all ${issueCfg.bar} opacity-80`}
+                                                                                                style={{ height: `${Math.max(10, (v / (maxTrend || 100)) * 100)}%` }}
+                                                                                            ></div>
+                                                                                            <span className="text-[9px] text-slate-400 font-bold">Q{ti + 1}</span>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+
+                                                                            {/* Last marks + drop */}
+                                                                            <div className="flex justify-between items-center">
+                                                                                <div className="flex gap-1">
+                                                                                    {issue.last_marks.map((m, mi) => (
+                                                                                        <span key={mi} className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-black text-white ${m >= 8 ? 'bg-green-500' : m >= 6 ? 'bg-yellow-500' : 'bg-red-500'}`}>
+                                                                                            {m}
+                                                                                        </span>
+                                                                                    ))}
+                                                                                </div>
+                                                                                {issue.drop_percent > 0 && (
+                                                                                    <span className="flex items-center gap-1 text-xs font-bold text-red-600">
+                                                                                        <TrendingDown className="w-3 h-3"/>−{issue.drop_percent}%
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </>
+                                    );
+                                })() : (
+                                    <div className="text-center py-20 text-slate-400">Не удалось загрузить данные</div>
                                 )}
                             </div>
                         )}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import '../App.css';
-import { BarChart3, Calendar, FileText, Users, GraduationCap, LayoutDashboard, Loader, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BarChart3, Calendar, FileText, Users, GraduationCap, LayoutDashboard, Loader, ChevronLeft, ChevronRight, ShieldAlert, Activity, TrendingDown, BarChart2 } from 'lucide-react';
 
 const ALL_CLASSES = ['9 A', '9 B', '10 A', '10 B'];
 const CLASS_COLORS = {
@@ -43,6 +43,10 @@ const AdminPanel = () => {
     const [scheduleLoading, setScheduleLoading] = useState(false);
     const [scheduleLoaded, setScheduleLoaded] = useState(false);
 
+    // Analytics state
+    const [analytics, setAnalytics] = useState(null);
+    const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
     useEffect(() => {
         fetchRadar();
     }, []);
@@ -65,7 +69,6 @@ const AdminPanel = () => {
         } catch(e) { console.error(e); }
         finally { setScheduleLoading(false); }
     }, [scheduleLoaded]);
-
     const fetchRadar = async () => {
         try {
             const res = await axios.get('http://localhost:8000/api/v1/admin/radar');
@@ -80,6 +83,19 @@ const AdminPanel = () => {
             ]);
         }
     };
+
+    const fetchAnalytics = useCallback(async () => {
+        setAnalyticsLoading(true);
+        try {
+            const res = await axios.get('http://localhost:8000/api/v1/teacher/early_warning');
+            if (res.data.status === 'success') setAnalytics(res.data);
+        } catch (e) { console.error(e); }
+        finally { setAnalyticsLoading(false); }
+    }, []);
+
+    useEffect(() => {
+        if (mainTab === 'analytics') fetchAnalytics();
+    }, [mainTab, fetchAnalytics]);
 
     const generateSchedule = async () => {
         setLoading(true);
@@ -139,6 +155,13 @@ const AdminPanel = () => {
                 >
                     <Users size={20} />
                     Мұғалімдер
+                </button>
+                <button 
+                    onClick={() => setMainTab('analytics')}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${mainTab === 'analytics' ? 'bg-red-600 text-white shadow-lg shadow-red-500/20' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'}`}
+                >
+                    <ShieldAlert size={20} />
+                    Рысқа-аналитика (Risk)
                 </button>
             </div>
 
@@ -464,7 +487,154 @@ const AdminPanel = () => {
                 </div>
             )}
 
-            {mainTab !== 'management' && (
+            {mainTab === 'analytics' && (
+                <div className="space-y-8 animate-in fade-in duration-500">
+                    {analyticsLoading ? (
+                        <div className="flex flex-col items-center justify-center py-24 bg-slate-800/30 rounded-3xl border border-slate-700">
+                            <Loader className="animate-spin text-red-500 mb-4" size={40} />
+                            <p className="text-slate-400 font-bold">Жалпы мектеп аналитикасы жүктелуде...</p>
+                        </div>
+                    ) : analytics ? (() => {
+                        const riskCfg = {
+                            high:   { label: 'Жоғары қауіп',   bg: 'bg-red-500/5', border: 'border-red-500/20', badge: 'bg-red-500/20 text-red-400', dot: 'bg-red-500', bar: 'bg-red-500' },
+                            medium: { label: 'Орташа қауіп',   bg: 'bg-orange-500/5', border: 'border-orange-500/20', badge: 'bg-orange-500/20 text-orange-400', dot: 'bg-orange-400', bar: 'bg-orange-400' },
+                            low:    { label: 'Төмен қауіп',   bg: 'bg-yellow-500/5', border: 'border-yellow-500/20', badge: 'bg-yellow-500/20 text-yellow-400', dot: 'bg-yellow-400', bar: 'bg-yellow-400' },
+                        };
+                        const highCount = analytics.risky_students.filter(s => s.risk_level === 'high').length;
+                        const medCount  = analytics.risky_students.filter(s => s.risk_level === 'medium').length;
+                        const lowCount  = analytics.risky_students.filter(s => s.risk_level === 'low').length;
+
+                        return (
+                            <>
+                                {/* KPI Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    {[
+                                        { icon: <ShieldAlert size={24}/>, label: 'Қауіп аймағындағылар', value: analytics.total_at_risk, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
+                                        { icon: <Activity size={24}/>,    label: 'Жоғары қауіп', value: highCount, color: 'text-red-500', bg: 'bg-slate-800 border-slate-700' },
+                                        { icon: <TrendingDown size={24}/>,label: 'Орташа қауіп', value: medCount, color: 'text-orange-400', bg: 'bg-slate-800 border-slate-700' },
+                                        { icon: <BarChart2 size={24}/>,   label: 'Төмен қауіп', value: lowCount, color: 'text-yellow-400', bg: 'bg-slate-800 border-slate-700' },
+                                    ].map((card, i) => (
+                                        <div key={i} className={`rounded-2xl border p-6 flex items-center gap-4 ${card.bg}`}>
+                                            <div className={`${card.color}`}>{card.icon}</div>
+                                            <div>
+                                                <div className="text-3xl font-black text-white">{card.value}</div>
+                                                <div className="text-xs font-bold text-slate-500 mt-0.5 uppercase tracking-wider">{card.label}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Class Summary */}
+                                <div className="bg-slate-800/40 border border-slate-700 rounded-2xl overflow-hidden">
+                                     <div className="px-6 py-4 border-b border-slate-700 bg-black/20 font-bold text-slate-300">
+                                         Сыныптар бойынша жағдай (Классы)
+                                     </div>
+                                     <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                         {analytics.class_summary?.map((cls, i) => (
+                                             <div key={i} className="bg-slate-900/50 rounded-xl p-4 border border-slate-700/50">
+                                                 <div className="flex justify-between items-center mb-3">
+                                                     <span className="font-black text-slate-300">{cls.class}</span>
+                                                     <span className="text-xl font-black text-blue-400">{cls.avg_bolzham}%</span>
+                                                 </div>
+                                                 <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mb-2">
+                                                     <div className="h-full bg-blue-500" style={{width: `${cls.avg_bolzham}%`}}></div>
+                                                 </div>
+                                                 <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                                                     <span>{cls.student_count} оқушы</span>
+                                                     {cls.at_risk_count > 0 && <span className="text-red-500">⚠ {cls.at_risk_count} қауіпте</span>}
+                                                 </div>
+                                             </div>
+                                         ))}
+                                     </div>
+                                </div>
+
+                                {/* Risky Students Feed */}
+                                <div className="space-y-4">
+                                    <h3 className="text-xl font-bold text-white flex items-center gap-2 px-2">
+                                        <TrendingDown className="text-red-500" size={20}/> Мектеп бойынша қауіпті оқушылар тізімі
+                                    </h3>
+                                    {analytics.risky_students.map(student => {
+                                        const cfg = riskCfg[student.risk_level] || riskCfg.low;
+                                        return (
+                                            <div key={student.id} className={`rounded-2xl border p-6 transition-all hover:bg-slate-800/30 ${cfg.bg} ${cfg.border}`}>
+                                                <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-xl ${cfg.bar}`}>
+                                                            {student.name.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-lg font-black text-white">{student.name}</div>
+                                                            <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">{student.class} · {student.issues_count} пән бойынша мәселе</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-6">
+                                                        <div className="text-right">
+                                                            <div className="text-2xl font-black text-white">{student.overall_bolzham}%</div>
+                                                            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Жалпы болжам</div>
+                                                        </div>
+                                                        <span className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest ${cfg.badge}`}>
+                                                            {cfg.label}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    {student.issues.map((issue, idx) => {
+                                                        const issueCfg = riskCfg[issue.risk] || riskCfg.low;
+                                                        return (
+                                                            <div key={idx} className="bg-black/30 rounded-xl p-4 border border-slate-700/50">
+                                                                <div className="flex justify-between items-start mb-4">
+                                                                    <span className="font-bold text-slate-200 text-sm">{issue.subject}</span>
+                                                                    <span className={`text-xs font-black px-2 py-1 rounded-lg ${issueCfg.badge}`}>{issue.bolzham}%</span>
+                                                                </div>
+                                                                
+                                                                {issue.trend.length > 0 && (
+                                                                    <div className="flex items-end gap-1 h-8 mb-4">
+                                                                        {issue.trend.map((v, ti) => (
+                                                                            <div key={ti} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
+                                                                                <div 
+                                                                                    className={`w-full rounded-t-sm transition-all ${issueCfg.bar} opacity-60`} 
+                                                                                    style={{height: `${v}%`}}
+                                                                                ></div>
+                                                                                <span className="text-[8px] text-slate-600 font-bold uppercase">Q{ti+1}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+
+                                                                <div className="flex justify-between items-center mt-2">
+                                                                    <div className="flex gap-1">
+                                                                        {issue.last_marks.map((m, mi) => (
+                                                                            <span key={mi} className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-black text-white ${m >= 8 ? 'bg-green-500/20 text-green-400' : m >= 6 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                                                                                {m}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                    {issue.drop_percent > 0 && (
+                                                                        <span className="text-[10px] font-black text-red-400 flex items-center gap-1">
+                                                                            <TrendingDown size={12}/> −{issue.drop_percent}%
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </>
+                        );
+                    })() : (
+                        <div className="py-20 text-center text-slate-500 border border-dashed border-slate-700 rounded-3xl">
+                            Мәліметтер табылмады
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {mainTab !== 'management' && mainTab !== 'analytics' && (
                 <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-10 flex flex-col items-center justify-center text-center">
                     <h3 className="text-2xl font-bold text-slate-400 mb-2">Бұл бөлім әзірленуде</h3>
                     <p className="text-slate-500">Қазіргі уақытта "Басқару" вкладкасы жұмыс істеп тұр.</p>

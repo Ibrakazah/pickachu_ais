@@ -701,14 +701,163 @@ async def get_student_prediction(uid: str):
     }
 
 @app.get("/api/v1/teacher/early_warning")
-async def get_early_warning():
+async def get_early_warning(subjects: str = Query(default=None)):
+    """
+    subjects: опциональный фильтр — предметы учителя через запятую.
+    Если не задан — возвращает все (для админа).
+    """
+    def calc_bolzham(marks):
+        def avg(t):
+            ms = [m["percent"] for m in marks if m.get("type") == t]
+            return sum(ms) / len(ms) if ms else None
+        fo, soch, sor = avg("ФО"), avg("СОЧ"), avg("СОР")
+        fo_sor = (fo + sor) / 2 if fo is not None and sor is not None else (fo or sor or 0)
+        if soch is not None:
+            return round(soch * 0.5 + fo_sor * 0.5, 1)
+        return round(fo_sor, 1)
+
+    # Нормализуем фильтр предметов
+    # Нормализуем фильтр предметов
+    # Учитель получает предметы из РАСПИСАНИЯ (на англ.), а оценки хранятся на рус/каз
+    SUBJECT_ALIASES = {
+        "math":              ["алгебра", "геометрия", "математика"],
+        "calculus":          ["алгебра", "геометрия", "математика"],
+        "algebra":           ["алгебра"],
+        "geometry":          ["геометрия"],
+        "physics":           ["физика"],
+        "chemistry":         ["химия"],
+        "biology":           ["биология"],
+        "history":           ["история", "тарих"],
+        "geography":         ["география", "жағрафия"],
+        "english":           ["ағылшын тілі", "английский язык"],
+        "russian":           ["орыс тілі", "русский язык"],
+        "kazakh":            ["қазақ тілі", "казахский язык", "қазақ әдебиеті"],
+        "ict":               ["информатика", "computer science"],
+        "computer science":  ["информатика", "ict"],
+        "physical education":["дене шынықтыру", "физкультура"],
+        "global perspectives":["дүниетану"],
+        "economics":         ["экономика"],
+        "art":               ["бейнелеу өнері", "изобразительное искусство"],
+        "self-knowledge":    ["өзін-өзі тану"],
+    }
+
+    filter_subjects = None
+    if subjects:
+        raw_filters = [s.strip().lower() for s in subjects.split(",") if s.strip()]
+        expanded = set()
+        for rf in raw_filters:
+            expanded.add(rf)
+            if rf in SUBJECT_ALIASES:
+                expanded.update(SUBJECT_ALIASES[rf])
+        filter_subjects = list(expanded)
+
+    students_info = {
+        "s1": {"name": "Алиев Арман",     "class": "10 A"},
+        "s2": {"name": "Бекова Аяжан",    "class": "9 A"},
+        "s3": {"name": "Ким Денис",        "class": "9 B"},
+        "s4": {"name": "Оспанова Мадина", "class": "10 B"},
+    }
+
+    risky_students = []
+    class_stats = {}
+
+    for sid, info in students_info.items():
+        grades = MOCK_GRADES_DB.get(sid, {})
+        cls = info["class"]
+        if cls not in class_stats:
+            class_stats[cls] = {"bolzhams": [], "count": 0}
+        class_stats[cls]["count"] += 1
+
+        student_issues = []
+        all_bolzhams = []
+
+        for subj_data in grades.values():
+            subj_name = subj_data["subject_name"]
+            marks = subj_data.get("marks", [])
+            quarters_raw = subj_data.get("quarters", [None, None, None, None])
+
+            # Болжам всегда считаем по всем предметам для общего показателя
+            bolzham_all = calc_bolzham(marks)
+            all_bolzhams.append(bolzham_all)
+
+            # Фильтрация по предметам учителя (если задан)
+            if filter_subjects and subj_name.lower() not in filter_subjects:
+                continue
+
+            # Тренд по четвертям
+            q_vals = [q for q in quarters_raw if q is not None]
+            trend = []
+            if len(q_vals) >= 2:
+                for i in range(len(q_vals)):
+                    trend.append(round(q_vals[i] * 10, 1))
+
+            # Падение: последний vs среднее предыдущих
+            drop_pct = 0
+            if len(q_vals) >= 2:
+                prev_avg = sum(q_vals[:-1]) / len(q_vals[:-1])
+                last = q_vals[-1]
+                if prev_avg > 0:
+                    drop_pct = round((prev_avg - last) / prev_avg * 100, 1)
+
+            # Уровень риска по болжаму
+            risk = None
+            if bolzham_all < 50:
+                risk = "high"
+            elif bolzham_all < 65:
+                risk = "medium"
+            elif bolzham_all < 75:
+                risk = "low"
+
+            if risk or drop_pct > 15:
+                student_issues.append({
+                    "subject": subj_name,
+                    "bolzham": bolzham_all,
+                    "drop_percent": max(drop_pct, 0),
+                    "risk": risk or "low",
+                    "trend": trend,
+                    "last_marks": [m["raw_val"] for m in marks[-3:]] if marks else []
+                })
+
+        overall_bolzham = round(sum(all_bolzhams) / len(all_bolzhams), 1) if all_bolzhams else 0
+        class_stats[cls]["bolzhams"].append(overall_bolzham)
+
+        if student_issues:
+            # Сортируем по болжаму (худшие вперёд)
+            student_issues.sort(key=lambda x: x["bolzham"])
+            worst_risk = "high" if any(i["risk"] == "high" for i in student_issues) \
+                         else ("medium" if any(i["risk"] == "medium" for i in student_issues) else "low")
+            risky_students.append({
+                "id": sid,
+                "name": info["name"],
+                "class": cls,
+                "overall_bolzham": overall_bolzham,
+                "risk_level": worst_risk,
+                "issues": student_issues[:3],   # топ 3 проблемных предмета
+                "issues_count": len(student_issues)
+            })
+
+    # Статистика по классам
+    class_summary = []
+    for cls, data in class_stats.items():
+        avg_b = round(sum(data["bolzhams"]) / len(data["bolzhams"]), 1) if data["bolzhams"] else 0
+        class_summary.append({
+            "class": cls,
+            "avg_bolzham": avg_b,
+            "student_count": data["count"],
+            "at_risk_count": sum(1 for s in risky_students if s["class"] == cls)
+        })
+
+    # Сортируем: сначала high risk
+    order = {"high": 0, "medium": 1, "low": 2}
+    risky_students.sort(key=lambda x: order.get(x["risk_level"], 3))
+
     return {
         "status": "success",
-        "risky_students": [
-            {"id": "s1", "name": "Алиев Арман", "drop_percent": 15, "last_marks": [2, 3, 2], "subject": "Геометрия"},
-            {"id": "s3", "name": "Ким Денис", "drop_percent": 22, "last_marks": [3, 2], "subject": "Физика"}
-        ]
+        "risky_students": risky_students,
+        "class_summary": class_summary,
+        "total_at_risk": len(risky_students)
     }
+
 
 @app.get("/api/v1/ai/teacher_report")
 async def get_ai_teacher_report():
@@ -982,3 +1131,4 @@ async def add_teacher_grade(req: AddGradePayload):
         return {"status": "success", "message": f"{req.grade_type} за {req.quarter}-четверть успешно выставлен!"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
