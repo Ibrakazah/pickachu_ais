@@ -33,4 +33,5 @@ Unified digital environment for student success, predictive analysis, and smart 
 npm run dev
 
 ---
-*Built with ❤️ by Pickachu Team.*
+*Built with ❤️ by zhumat ibrahim aka azat ackylbekov aka zxcalinalove
+
